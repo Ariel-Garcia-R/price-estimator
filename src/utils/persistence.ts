@@ -52,6 +52,21 @@ export function readRecord(keys: readonly string[]): Record<string, unknown> | n
   return null;
 }
 
+/** Reads the first key that holds a parseable JSON array. */
+export function readArray(keys: readonly string[]): unknown[] | null {
+  for (const key of keys) {
+    const raw = safeGetItem(key);
+    if (!raw) continue;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Ignore malformed entries and try the next candidate key.
+    }
+  }
+  return null;
+}
+
 export function readNumber(
   source: Record<string, unknown> | null,
   keys: readonly string[],

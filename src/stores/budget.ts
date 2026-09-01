@@ -1,80 +1,101 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
-import { DEFAULT_VALUES, LEGACY_STORAGE_KEYS, LIMITS, STORAGE_KEYS } from '@/utils/constants';
-import { readRecord, readNumber, writeRecord } from '@/utils/persistence';
+import {
+  DEFAULT_VALUES,
+  LEGACY_STORAGE_KEYS,
+  LIMITS,
+  SAFETY_PERCENT_OPTIONS,
+  STORAGE_KEYS,
+  type SafetyPercent,
+} from '@/utils/constants';
+import { readRecord, readNumber, readString, writeRecord } from '@/utils/persistence';
 import { calculateBudget, clampNumber } from '@/utils/calculations';
+import { useMaterialsStore } from '@/stores/materials';
+import { useProductionStore } from '@/stores/production';
 import { useRatesStore } from '@/stores/rates';
 
 interface PersistedPreferences {
   modelWeightGrams: number;
-  filamentPricePerKiloCUP: number;
-  marginPercent: number;
+  selectedMaterialId: string | null;
+  safetyPercent: SafetyPercent;
 }
 
-const DEFAULT_PREFERENCES: PersistedPreferences = {
-  modelWeightGrams: DEFAULT_VALUES.MODEL_WEIGHT_GRAMS,
-  filamentPricePerKiloCUP: DEFAULT_VALUES.FILAMENT_PRICE_PER_KILO_CUP,
-  marginPercent: DEFAULT_VALUES.MARGIN_PERCENT,
-};
+function isSafetyPercent(value: number): value is SafetyPercent {
+  return SAFETY_PERCENT_OPTIONS.some((option) => option === value);
+}
 
 function loadPreferences(): PersistedPreferences {
   const stored = readRecord([STORAGE_KEYS.PREFERENCES, LEGACY_STORAGE_KEYS.PREFERENCES]);
-  if (!stored) return { ...DEFAULT_PREFERENCES };
+  const safetyPercent = readNumber(stored, ['safetyPercent'], DEFAULT_VALUES.SAFETY_PERCENT);
 
   return {
     modelWeightGrams: readNumber(
       stored,
       ['modelWeightGrams', 'pesoModeloGramos'],
-      DEFAULT_PREFERENCES.modelWeightGrams,
+      DEFAULT_VALUES.MODEL_WEIGHT_GRAMS,
     ),
-    filamentPricePerKiloCUP: readNumber(
-      stored,
-      ['filamentPricePerKiloCUP', 'precioFilamentoKiloCUP'],
-      DEFAULT_PREFERENCES.filamentPricePerKiloCUP,
-    ),
-    marginPercent: readNumber(
-      stored,
-      ['marginPercent', 'porcientoMargen'],
-      DEFAULT_PREFERENCES.marginPercent,
-    ),
+    selectedMaterialId: readString(stored, ['selectedMaterialId']) ?? null,
+    safetyPercent: isSafetyPercent(safetyPercent)
+      ? safetyPercent
+      : DEFAULT_VALUES.SAFETY_PERCENT,
   };
 }
 
 export const useBudgetStore = defineStore('budget', () => {
   const preferences = loadPreferences();
 
-  const modelWeightGrams = ref(preferences.modelWeightGrams);
-  const filamentPricePerKiloCUP = ref(preferences.filamentPricePerKiloCUP);
-  const marginPercent = ref(preferences.marginPercent);
+  const materialsStore = useMaterialsStore();
+  const productionStore = useProductionStore();
+  const ratesStore = useRatesStore();
 
-  watch([modelWeightGrams, filamentPricePerKiloCUP, marginPercent], () => {
+  const modelWeightGrams = ref(preferences.modelWeightGrams);
+  const selectedMaterialId = ref<string | null>(preferences.selectedMaterialId);
+  const safetyPercent = ref<SafetyPercent>(preferences.safetyPercent);
+
+  watch([modelWeightGrams, selectedMaterialId, safetyPercent], () => {
     const payload: PersistedPreferences = {
       modelWeightGrams: modelWeightGrams.value,
-      filamentPricePerKiloCUP: filamentPricePerKiloCUP.value,
-      marginPercent: marginPercent.value,
+      selectedMaterialId: selectedMaterialId.value,
+      safetyPercent: safetyPercent.value,
     };
     writeRecord(STORAGE_KEYS.PREFERENCES, payload);
   });
 
-  const ratesStore = useRatesStore();
+  const selectedMaterial = computed(() => materialsStore.findById(selectedMaterialId.value));
+
+  /**
+   * Keeps the selection pointing at an existing material: on first run there is
+   * no stored id, and a material can be deleted from Settings while selected.
+   */
+  watch(
+    () => [selectedMaterial.value, materialsStore.materials[0]] as const,
+    ([current, first]) => {
+      if (current) return;
+      selectedMaterialId.value = first ? first.id : null;
+    },
+    { immediate: true },
+  );
 
   const result = computed(() =>
     calculateBudget({
       modelWeightGrams: clampNumber(modelWeightGrams.value, 0, LIMITS.MODEL_WEIGHT_GRAMS_MAX),
-      filamentPricePerKiloCUP: clampNumber(
-        filamentPricePerKiloCUP.value,
-        0,
-        LIMITS.FILAMENT_PRICE_PER_KILO_CUP_MAX,
-      ),
-      marginPercent: clampNumber(marginPercent.value, 0, LIMITS.MARGIN_PERCENT_MAX),
+      materialPricePerKilo: selectedMaterial.value
+        ? {
+            value: selectedMaterial.value.price,
+            currency: selectedMaterial.value.currency,
+          }
+        : null,
+      productionCostPerGram: productionStore.amountPerGram,
+      safetyPercent: safetyPercent.value,
       dollarRateCUP: ratesStore.dollarRateCUP,
     }),
   );
 
   return {
     modelWeightGrams,
-    filamentPricePerKiloCUP,
-    marginPercent,
+    selectedMaterialId,
+    selectedMaterial,
+    safetyPercent,
     result,
   };
 });
