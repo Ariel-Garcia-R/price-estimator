@@ -1,60 +1,61 @@
-const ELTOQUE_URL = 'https://tasas.eltoque.com/v1/trmi';
+/**
+ * Client for the app's own rate endpoint.
+ *
+ * The El Toque API is NOT called directly from the browser: it sends no
+ * `Access-Control-Allow-Origin` header and the required `Authorization` header
+ * forces a CORS preflight, so the browser blocks it. The request is proxied by
+ * `api/eltoque-rate.ts`, which also keeps the API token off the client.
+ */
 
-/** Free token available at https://tasas-token.eltoque.com/ */
-export const ELTOQUE_TOKEN = import.meta.env.VITE_ELTOQUE_TOKEN ?? '';
+const RATE_ENDPOINT = '/api/eltoque-rate';
 
-export interface ElToqueRates {
-  USD?: number;
-  MLC?: number;
-  ECU?: number;
+interface RateSuccess {
+  usd: number;
+  updatedAt: string;
 }
 
-export interface ElToqueResponse {
-  /** Upstream API wire field name — kept in Spanish on purpose. */
-  tasas: ElToqueRates;
-  date?: string;
-  hour?: number;
-  minutes?: number;
-  seconds?: number;
+interface RateFailure {
+  error: string;
 }
 
-function formatLocalDate(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+function isRateSuccess(value: unknown): value is RateSuccess {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Partial<RateSuccess>;
+  return typeof candidate.usd === 'number' && Number.isFinite(candidate.usd) && candidate.usd > 0;
 }
 
-function buildRangeParams(now: Date): URLSearchParams {
-  const from = new Date(now.getTime() - 23 * 60 * 60 * 1000);
-  const params = new URLSearchParams();
-  params.set('date_from', formatLocalDate(from));
-  params.set('date_to', formatLocalDate(now));
-  return params;
+function readError(value: unknown, fallback: string): string {
+  if (typeof value === 'object' && value !== null) {
+    const candidate = value as Partial<RateFailure>;
+    if (typeof candidate.error === 'string' && candidate.error.length > 0) {
+      return candidate.error;
+    }
+  }
+  return fallback;
 }
 
-export async function fetchElToqueDollarRate(now = new Date()): Promise<number> {
-  if (!ELTOQUE_TOKEN) {
-    throw new Error('El Toque token is not configured. Add it as VITE_ELTOQUE_TOKEN.');
+export async function fetchElToqueDollarRate(): Promise<number> {
+  let response: Response;
+  try {
+    response = await fetch(RATE_ENDPOINT, { headers: { Accept: 'application/json' } });
+  } catch {
+    throw new Error('Network error while fetching the exchange rate.');
   }
 
-  const params = buildRangeParams(now);
-  const response = await fetch(`${ELTOQUE_URL}?${params.toString()}`, {
-    headers: {
-      Authorization: `Bearer ${ELTOQUE_TOKEN}`,
-    },
-  });
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    // Fall through to the status-based error below.
+  }
 
   if (!response.ok) {
-    throw new Error(`El Toque responded with status ${response.status}`);
+    throw new Error(readError(payload, `The rate service responded with status ${response.status}`));
   }
 
-  const data: ElToqueResponse = await response.json();
-  const usd = data.tasas?.USD;
-
-  if (typeof usd !== 'number' || !Number.isFinite(usd) || usd <= 0) {
-    throw new Error('The El Toque API did not return a valid USD rate');
+  if (!isRateSuccess(payload)) {
+    throw new Error(readError(payload, 'The rate service did not return a valid USD rate.'));
   }
 
-  return usd;
+  return payload.usd;
 }
