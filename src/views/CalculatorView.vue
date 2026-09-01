@@ -17,8 +17,8 @@ const breakdown = computed(() => [
     currency: CURRENCY.CUP,
   },
   {
-    label: 'Base cost (with margin)',
-    value: round(budgetStore.result.baseCostCUP),
+    label: `Profit margin (${budgetStore.marginPercent || 0}%)`,
+    value: round(budgetStore.result.marginAmountCUP),
     currency: CURRENCY.CUP,
   },
 ]);
