@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { computed, ref, watch } from 'vue';
-import { DEFAULT_VALUES, LIMITS, STORAGE_KEYS } from '@/utils/constants';
-import { parseJsonRecord, readNumber } from '@/utils/persistence';
+import { DEFAULT_VALUES, LEGACY_STORAGE_KEYS, LIMITS, STORAGE_KEYS } from '@/utils/constants';
+import { readRecord, readNumber, writeRecord } from '@/utils/persistence';
 import { calculateBudget, clampNumber } from '@/utils/calculations';
 import { useRatesStore } from '@/stores/rates';
 
@@ -18,7 +18,7 @@ const DEFAULT_PREFERENCES: PersistedPreferences = {
 };
 
 function loadPreferences(): PersistedPreferences {
-  const stored = parseJsonRecord(localStorage.getItem(STORAGE_KEYS.PREFERENCES));
+  const stored = readRecord([STORAGE_KEYS.PREFERENCES, LEGACY_STORAGE_KEYS.PREFERENCES]);
   if (!stored) return { ...DEFAULT_PREFERENCES };
 
   return {
@@ -53,7 +53,7 @@ export const useBudgetStore = defineStore('budget', () => {
       filamentPricePerKiloCUP: filamentPricePerKiloCUP.value,
       marginPercent: marginPercent.value,
     };
-    localStorage.setItem(STORAGE_KEYS.PREFERENCES, JSON.stringify(payload));
+    writeRecord(STORAGE_KEYS.PREFERENCES, payload);
   });
 
   const ratesStore = useRatesStore();

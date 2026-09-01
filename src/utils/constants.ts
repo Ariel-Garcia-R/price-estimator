@@ -1,4 +1,16 @@
+export const APP_NAME = 'Price Estimator';
+
 export const STORAGE_KEYS = {
+  RATES: 'price_estimator_rates',
+  PREFERENCES: 'price_estimator_preferences',
+  THEME: 'price_estimator_theme',
+} as const;
+
+/**
+ * Keys written before the app was renamed from "FunnelPrint 3D". They are still
+ * read as a fallback so data saved by an already-deployed build is not lost.
+ */
+export const LEGACY_STORAGE_KEYS = {
   RATES: 'funnelprint_rates',
   PREFERENCES: 'funnelprint_preferences',
 } as const;

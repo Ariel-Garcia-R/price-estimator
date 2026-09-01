@@ -1,10 +1,36 @@
 /**
- * Helpers for reading values out of untrusted `localStorage` JSON.
+ * Helpers for reading and writing untrusted `localStorage` JSON.
  *
- * Each reader accepts several candidate keys so that payloads written by an
- * earlier version of the app (which used Spanish field names) are still
- * readable after the migration to English identifiers.
+ * Readers accept several candidate keys so that payloads written by earlier
+ * versions of the app stay readable:
+ *  - storage keys were prefixed `funnelprint_` before the rename;
+ *  - object fields used Spanish names before the migration to English.
  */
+
+/** `localStorage` throws in private modes and when quota is exceeded. */
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function writeRecord(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Persistence is best-effort; ignore quota and private-mode failures.
+  }
+}
+
+export function readRawString(keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = safeGetItem(key);
+    if (value !== null) return value;
+  }
+  return null;
+}
 
 export function parseJsonRecord(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
@@ -15,6 +41,15 @@ export function parseJsonRecord(raw: string | null): Record<string, unknown> | n
   } catch {
     return null;
   }
+}
+
+/** Reads the first key that holds a parseable JSON object. */
+export function readRecord(keys: readonly string[]): Record<string, unknown> | null {
+  for (const key of keys) {
+    const record = parseJsonRecord(safeGetItem(key));
+    if (record) return record;
+  }
+  return null;
 }
 
 export function readNumber(

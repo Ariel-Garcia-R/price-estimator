@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { STORAGE_KEYS } from '@/utils/constants';
-import { parseJsonRecord, readNumber, readString } from '@/utils/persistence';
+import { STORAGE_KEYS, LEGACY_STORAGE_KEYS } from '@/utils/constants';
+import { readRecord, readNumber, readString, writeRecord } from '@/utils/persistence';
 import { fetchElToqueDollarRate } from '@/services/elToque';
 import { isPositiveDollarRate } from '@/utils/calculations';
 
@@ -18,7 +18,7 @@ function isRateSource(value: string | undefined): value is RateSource {
 }
 
 function loadPersisted(): PersistedRates {
-  const stored = parseJsonRecord(localStorage.getItem(STORAGE_KEYS.RATES));
+  const stored = readRecord([STORAGE_KEYS.RATES, LEGACY_STORAGE_KEYS.RATES]);
   const source = readString(stored, ['source', 'fuente']);
 
   return {
@@ -43,7 +43,7 @@ export const useRatesStore = defineStore('rates', () => {
       updatedAt: updatedAt.value,
       source: source.value,
     };
-    localStorage.setItem(STORAGE_KEYS.RATES, JSON.stringify(payload));
+    writeRecord(STORAGE_KEYS.RATES, payload);
   }
 
   function setManualRate(value: number) {

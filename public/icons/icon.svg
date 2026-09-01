@@ -2,13 +2,11 @@
   <rect width="192" height="192" rx="40" fill="#1867c0" />
   <text
     x="96"
-    y="120"
-    font-family="Arial, sans-serif"
-    font-size="80"
+    y="124"
+    font-family="Arial, Helvetica, sans-serif"
+    font-size="82"
     font-weight="bold"
     fill="#ffffff"
     text-anchor="middle"
-  >
-    3D
-  </text>
+  >PE</text>
 </svg>
