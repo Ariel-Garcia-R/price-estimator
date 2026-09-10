@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { useProductionStore } from '@/stores/production';
-import { CURRENCY_OPTIONS } from '@/utils/constants';
+import { CURRENCY_OPTIONS, LIMITS } from '@/utils/constants';
 
 const productionStore = useProductionStore();
+
+const productionCostRules = [
+  (value: number) =>
+    Number.isFinite(value) && value >= LIMITS.PRODUCTION_COST_PER_GRAM_MIN
+      ? true
+      : `Must be at least ${LIMITS.PRODUCTION_COST_PER_GRAM_MIN}`,
+];
 </script>
 
 <template>
@@ -12,12 +19,13 @@ const productionStore = useProductionStore();
       <v-text-field
         v-model.number="productionStore.costPerGram"
         type="number"
-        min="0"
+        :min="LIMITS.PRODUCTION_COST_PER_GRAM_MIN"
         step="0.01"
         label="Cost per gram"
         suffix="/ g"
         hint="Machine time, wear and energy"
         persistent-hint
+        :rules="productionCostRules"
       />
       <v-select
         v-model="productionStore.currency"

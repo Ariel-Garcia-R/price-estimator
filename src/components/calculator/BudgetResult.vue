@@ -6,9 +6,7 @@ import { round } from '@/utils/calculations';
 
 const budgetStore = useBudgetStore();
 
-const hasResult = computed(
-  () => budgetStore.result.subtotalCUP > 0 || budgetStore.result.paintLaborCostCUP > 0,
-);
+const hasResult = computed(() => !budgetStore.result.requiresDollarRate);
 
 const breakdown = computed(() => {
   const rows = [
@@ -25,6 +23,10 @@ const breakdown = computed(() => {
     {
       label: `Safety margin (${budgetStore.safetyPercent}%)`,
       value: round(budgetStore.result.safetyAmountCUP),
+    },
+    {
+      label: 'Profit',
+      value: round(budgetStore.result.profitCUP),
     },
   ];
 
@@ -49,8 +51,7 @@ const breakdown = computed(() => {
         variant="tonal"
         class="mb-4"
       >
-        Some prices are in USD. Set the dollar exchange rate in Settings to get the
-        price in CUP.
+        Set the dollar exchange rate in Settings to calculate the price.
       </v-alert>
 
       <v-list v-if="hasResult">
@@ -87,13 +88,6 @@ const breakdown = computed(() => {
           </template>
         </v-list-item>
       </v-list>
-      <v-alert
-        v-else-if="!budgetStore.result.requiresDollarRate"
-        type="info"
-        variant="tonal"
-      >
-        Enter the weight of the piece to see the price.
-      </v-alert>
     </v-card-text>
   </v-card>
 </template>

@@ -1,11 +1,13 @@
 import type { MoneyAmount } from '@/types';
-import { CURRENCY } from '@/utils/constants';
+import { CURRENCY, PRICING_FACTORS } from '@/utils/constants';
 
 export interface BudgetInput {
-  modelWeightGrams: number;
-  /** Price of one kilo of the selected filament. `null` when none is selected. */
-  materialPricePerKilo: MoneyAmount | null;
-  /** Machine time, wear and energy, per gram of filament. */
+  /**
+   * The "cost per gram" value configured in Settings. The filament weight and
+   * price no longer participate in the calculation directly: material cost,
+   * production cost and profit are all derived from this single value. Kept
+   * as a `MoneyAmount` for parity with Settings, but only `.value` is used.
+   */
   productionCostPerGram: MoneyAmount;
   safetyPercent: number;
   dollarRateCUP: number;
@@ -18,13 +20,15 @@ export interface BudgetInput {
 export interface BudgetResult {
   materialCostCUP: number;
   productionCostCUP: number;
+  /** Profit derived from the production cost setting, added on top of the total. */
+  profitCUP: number;
   subtotalCUP: number;
   safetyAmountCUP: number;
   paintLaborCostCUP: number;
   totalCUP: number;
   totalUSD: number;
   /**
-   * True when a USD amount contributes to the total but no exchange rate is
+   * True when an amount contributes to the total but no exchange rate is
    * available, so the total shown is incomplete rather than merely zero.
    */
   requiresDollarRate: boolean;
@@ -40,38 +44,36 @@ export function convertToCUP(amount: MoneyAmount, dollarRateCUP: number): number
   return isPositiveDollarRate(dollarRateCUP) ? amount.value * dollarRateCUP : 0;
 }
 
-function needsMissingRate(amount: MoneyAmount, dollarRateCUP: number): boolean {
-  return (
-    amount.currency === CURRENCY.USD &&
-    amount.value > 0 &&
-    !isPositiveDollarRate(dollarRateCUP)
-  );
-}
-
+/**
+ * Material cost, production cost and profit are all derived from the single
+ * "cost per gram" setting (`P`) and the dollar rate (`R`):
+ *   - Material  = P * MATERIAL_COST_FACTOR * R
+ *   - Production = (P - MATERIAL_COST_FACTOR) * R
+ *   - Profit    = (P - PROFIT_OFFSET) * R
+ * The piece weight and the selected filament are not part of these formulas;
+ * they remain in the UI for reference only.
+ */
 export function calculateBudget(input: BudgetInput): BudgetResult {
-  const kilos = input.modelWeightGrams / 1000;
+  const hasRate = isPositiveDollarRate(input.dollarRateCUP);
+  const productionCostValue = input.productionCostPerGram.value;
 
-  const materialAmount: MoneyAmount = input.materialPricePerKilo
-    ? {
-        value: input.materialPricePerKilo.value * kilos,
-        currency: input.materialPricePerKilo.currency,
-      }
-    : { value: 0, currency: CURRENCY.CUP };
+  const materialCostCUP = hasRate
+    ? productionCostValue * PRICING_FACTORS.MATERIAL_COST_FACTOR * input.dollarRateCUP
+    : 0;
 
-  const productionAmount: MoneyAmount = {
-    value: input.productionCostPerGram.value * input.modelWeightGrams,
-    currency: input.productionCostPerGram.currency,
-  };
+  const productionCostCUP = hasRate
+    ? (productionCostValue - PRICING_FACTORS.MATERIAL_COST_FACTOR) * input.dollarRateCUP
+    : 0;
 
-  const materialCostCUP = convertToCUP(materialAmount, input.dollarRateCUP);
-  const productionCostCUP = convertToCUP(productionAmount, input.dollarRateCUP);
+  const profitCUP = hasRate
+    ? (productionCostValue - PRICING_FACTORS.PROFIT_OFFSET) * input.dollarRateCUP
+    : 0;
 
   const subtotalCUP = materialCostCUP + productionCostCUP;
 
-  // The safety percentage is applied to the piece subtotal only, so a 15%
-  // selection turns a 100 CUP piece into 115 CUP. Painting labor is a
-  // separate service charge and is added afterwards, unaffected by the
-  // failed-print margin.
+  // The safety percentage is applied to the material + production subtotal
+  // only, so a 15% selection turns a 100 CUP piece into 115 CUP. Profit and
+  // painting labor are added afterwards, unaffected by the failed-print margin.
   const totalWithSafetyCUP = subtotalCUP * (1 + input.safetyPercent / 100);
 
   // Derived by subtraction rather than recomputed, which guarantees that the
@@ -82,24 +84,22 @@ export function calculateBudget(input: BudgetInput): BudgetResult {
     ? convertToCUP(input.paintLaborCost, input.dollarRateCUP)
     : 0;
 
-  const totalCUP = totalWithSafetyCUP + paintLaborCostCUP;
+  const totalCUP = totalWithSafetyCUP + profitCUP + paintLaborCostCUP;
 
-  const totalUSD = isPositiveDollarRate(input.dollarRateCUP)
-    ? totalCUP / input.dollarRateCUP
-    : 0;
+  const totalUSD = hasRate ? totalCUP / input.dollarRateCUP : 0;
 
   return {
     materialCostCUP,
     productionCostCUP,
+    profitCUP,
     subtotalCUP,
     safetyAmountCUP,
     paintLaborCostCUP,
     totalCUP,
     totalUSD,
-    requiresDollarRate:
-      needsMissingRate(materialAmount, input.dollarRateCUP) ||
-      needsMissingRate(productionAmount, input.dollarRateCUP) ||
-      (input.requiresPainting && needsMissingRate(input.paintLaborCost, input.dollarRateCUP)),
+    // Every component above depends on the dollar rate, so a missing rate
+    // always makes the result incomplete.
+    requiresDollarRate: !hasRate,
   };
 }
 

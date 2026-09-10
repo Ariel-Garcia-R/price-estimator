@@ -44,7 +44,7 @@ export const DEFAULT_VALUES = {
   REQUIRES_PAINTING: false,
   /** Painting labor cost added on top of the final price when enabled. */
   PAINT_LABOR_COST: 0,
-  PAINT_LABOR_COST_CURRENCY: CURRENCY.USD,
+  PAINT_LABOR_COST_CURRENCY: CURRENCY.CUP,
 } as const;
 
 /** Seeded on first run so the calculator is usable without visiting Settings. */
@@ -58,7 +58,19 @@ export const LIMITS = {
   MODEL_WEIGHT_GRAMS_MAX: 100000,
   /** Price for one kilo of filament, in the material's own currency. */
   MATERIAL_PRICE_MAX: 100000,
+  /** Below this, the production cost setting is considered misconfigured. */
+  PRODUCTION_COST_PER_GRAM_MIN: 0.08,
   PRODUCTION_COST_PER_GRAM_MAX: 10000,
   MATERIAL_NAME_MAX_LENGTH: 40,
   PAINT_LABOR_COST_MAX: 100000,
+} as const;
+
+/**
+ * Fixed factors used to derive material cost, production cost and profit
+ * from the single "cost per gram" value configured in Settings, once
+ * converted to CUP with the dollar rate. See `calculateBudget`.
+ */
+export const PRICING_FACTORS = {
+  MATERIAL_COST_FACTOR: 0.04,
+  PROFIT_OFFSET: 0.08,
 } as const;
