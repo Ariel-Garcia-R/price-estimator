@@ -9,6 +9,10 @@ export interface BudgetInput {
   productionCostPerGram: MoneyAmount;
   safetyPercent: number;
   dollarRateCUP: number;
+  /** Whether painting labor cost should be added to the final price. */
+  requiresPainting: boolean;
+  /** Painting labor cost, only added to the total when `requiresPainting` is true. */
+  paintLaborCost: MoneyAmount;
 }
 
 export interface BudgetResult {
@@ -16,6 +20,7 @@ export interface BudgetResult {
   productionCostCUP: number;
   subtotalCUP: number;
   safetyAmountCUP: number;
+  paintLaborCostCUP: number;
   totalCUP: number;
   totalUSD: number;
   /**
@@ -63,13 +68,21 @@ export function calculateBudget(input: BudgetInput): BudgetResult {
 
   const subtotalCUP = materialCostCUP + productionCostCUP;
 
-  // The safety percentage is applied to the whole subtotal, so a 15% selection
-  // turns a 100 CUP piece into 115 CUP.
-  const totalCUP = subtotalCUP * (1 + input.safetyPercent / 100);
+  // The safety percentage is applied to the piece subtotal only, so a 15%
+  // selection turns a 100 CUP piece into 115 CUP. Painting labor is a
+  // separate service charge and is added afterwards, unaffected by the
+  // failed-print margin.
+  const totalWithSafetyCUP = subtotalCUP * (1 + input.safetyPercent / 100);
 
   // Derived by subtraction rather than recomputed, which guarantees that the
   // rows shown in the breakdown always add up to the total exactly.
-  const safetyAmountCUP = totalCUP - subtotalCUP;
+  const safetyAmountCUP = totalWithSafetyCUP - subtotalCUP;
+
+  const paintLaborCostCUP = input.requiresPainting
+    ? convertToCUP(input.paintLaborCost, input.dollarRateCUP)
+    : 0;
+
+  const totalCUP = totalWithSafetyCUP + paintLaborCostCUP;
 
   const totalUSD = isPositiveDollarRate(input.dollarRateCUP)
     ? totalCUP / input.dollarRateCUP
@@ -80,11 +93,13 @@ export function calculateBudget(input: BudgetInput): BudgetResult {
     productionCostCUP,
     subtotalCUP,
     safetyAmountCUP,
+    paintLaborCostCUP,
     totalCUP,
     totalUSD,
     requiresDollarRate:
       needsMissingRate(materialAmount, input.dollarRateCUP) ||
-      needsMissingRate(productionAmount, input.dollarRateCUP),
+      needsMissingRate(productionAmount, input.dollarRateCUP) ||
+      (input.requiresPainting && needsMissingRate(input.paintLaborCost, input.dollarRateCUP)),
   };
 }
 

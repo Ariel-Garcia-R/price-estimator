@@ -6,9 +6,16 @@ import {
   LIMITS,
   SAFETY_PERCENT_OPTIONS,
   STORAGE_KEYS,
+  type Currency,
   type SafetyPercent,
 } from '@/utils/constants';
-import { readRecord, readNumber, readString, writeRecord } from '@/utils/persistence';
+import {
+  readRecord,
+  readBoolean,
+  readNumber,
+  readString,
+  writeRecord,
+} from '@/utils/persistence';
 import { calculateBudget, clampNumber } from '@/utils/calculations';
 import { useMaterialsStore } from '@/stores/materials';
 import { useProductionStore } from '@/stores/production';
@@ -18,6 +25,9 @@ interface PersistedPreferences {
   modelWeightGrams: number;
   selectedMaterialId: string | null;
   safetyPercent: SafetyPercent;
+  requiresPainting: boolean;
+  paintLaborCost: number;
+  paintLaborCurrency: Currency;
 }
 
 function isSafetyPercent(value: number): value is SafetyPercent {
@@ -27,6 +37,7 @@ function isSafetyPercent(value: number): value is SafetyPercent {
 function loadPreferences(): PersistedPreferences {
   const stored = readRecord([STORAGE_KEYS.PREFERENCES, LEGACY_STORAGE_KEYS.PREFERENCES]);
   const safetyPercent = readNumber(stored, ['safetyPercent'], DEFAULT_VALUES.SAFETY_PERCENT);
+  const paintLaborCurrency = readString(stored, ['paintLaborCurrency']);
 
   return {
     modelWeightGrams: readNumber(
@@ -38,6 +49,20 @@ function loadPreferences(): PersistedPreferences {
     safetyPercent: isSafetyPercent(safetyPercent)
       ? safetyPercent
       : DEFAULT_VALUES.SAFETY_PERCENT,
+    requiresPainting: readBoolean(
+      stored,
+      ['requiresPainting'],
+      DEFAULT_VALUES.REQUIRES_PAINTING,
+    ),
+    paintLaborCost: readNumber(
+      stored,
+      ['paintLaborCost'],
+      DEFAULT_VALUES.PAINT_LABOR_COST,
+    ),
+    paintLaborCurrency:
+      paintLaborCurrency === 'CUP' || paintLaborCurrency === 'USD'
+        ? paintLaborCurrency
+        : DEFAULT_VALUES.PAINT_LABOR_COST_CURRENCY,
   };
 }
 
@@ -51,15 +76,31 @@ export const useBudgetStore = defineStore('budget', () => {
   const modelWeightGrams = ref(preferences.modelWeightGrams);
   const selectedMaterialId = ref<string | null>(preferences.selectedMaterialId);
   const safetyPercent = ref<SafetyPercent>(preferences.safetyPercent);
+  const requiresPainting = ref(preferences.requiresPainting);
+  const paintLaborCost = ref(preferences.paintLaborCost);
+  const paintLaborCurrency = ref<Currency>(preferences.paintLaborCurrency);
 
-  watch([modelWeightGrams, selectedMaterialId, safetyPercent], () => {
-    const payload: PersistedPreferences = {
-      modelWeightGrams: modelWeightGrams.value,
-      selectedMaterialId: selectedMaterialId.value,
-      safetyPercent: safetyPercent.value,
-    };
-    writeRecord(STORAGE_KEYS.PREFERENCES, payload);
-  });
+  watch(
+    [
+      modelWeightGrams,
+      selectedMaterialId,
+      safetyPercent,
+      requiresPainting,
+      paintLaborCost,
+      paintLaborCurrency,
+    ],
+    () => {
+      const payload: PersistedPreferences = {
+        modelWeightGrams: modelWeightGrams.value,
+        selectedMaterialId: selectedMaterialId.value,
+        safetyPercent: safetyPercent.value,
+        requiresPainting: requiresPainting.value,
+        paintLaborCost: paintLaborCost.value,
+        paintLaborCurrency: paintLaborCurrency.value,
+      };
+      writeRecord(STORAGE_KEYS.PREFERENCES, payload);
+    },
+  );
 
   const selectedMaterial = computed(() => materialsStore.findById(selectedMaterialId.value));
 
@@ -88,6 +129,11 @@ export const useBudgetStore = defineStore('budget', () => {
       productionCostPerGram: productionStore.amountPerGram,
       safetyPercent: safetyPercent.value,
       dollarRateCUP: ratesStore.dollarRateCUP,
+      requiresPainting: requiresPainting.value,
+      paintLaborCost: {
+        value: clampNumber(paintLaborCost.value, 0, LIMITS.PAINT_LABOR_COST_MAX),
+        currency: paintLaborCurrency.value,
+      },
     }),
   );
 
@@ -96,6 +142,9 @@ export const useBudgetStore = defineStore('budget', () => {
     selectedMaterialId,
     selectedMaterial,
     safetyPercent,
+    requiresPainting,
+    paintLaborCost,
+    paintLaborCurrency,
     result,
   };
 });

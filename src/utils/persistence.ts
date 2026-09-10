@@ -91,3 +91,16 @@ export function readString(
   }
   return undefined;
 }
+
+export function readBoolean(
+  source: Record<string, unknown> | null,
+  keys: readonly string[],
+  fallback: boolean,
+): boolean {
+  if (!source) return fallback;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'boolean') return value;
+  }
+  return fallback;
+}

@@ -41,6 +41,10 @@ export const DEFAULT_VALUES = {
   /** Machine time, wear and energy, expressed per gram of filament. */
   PRODUCTION_COST_PER_GRAM: 0,
   PRODUCTION_COST_CURRENCY: CURRENCY.USD,
+  REQUIRES_PAINTING: false,
+  /** Painting labor cost added on top of the final price when enabled. */
+  PAINT_LABOR_COST: 0,
+  PAINT_LABOR_COST_CURRENCY: CURRENCY.USD,
 } as const;
 
 /** Seeded on first run so the calculator is usable without visiting Settings. */
@@ -56,4 +60,5 @@ export const LIMITS = {
   MATERIAL_PRICE_MAX: 100000,
   PRODUCTION_COST_PER_GRAM_MAX: 10000,
   MATERIAL_NAME_MAX_LENGTH: 40,
+  PAINT_LABOR_COST_MAX: 100000,
 } as const;

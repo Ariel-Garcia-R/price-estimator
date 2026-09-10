@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useBudgetStore } from '@/stores/budget';
 import { useMaterialsStore } from '@/stores/materials';
-import { SAFETY_PERCENT_OPTIONS } from '@/utils/constants';
+import { CURRENCY_OPTIONS, SAFETY_PERCENT_OPTIONS } from '@/utils/constants';
 import { formatMoney } from '@/utils/currency';
 
 const budgetStore = useBudgetStore();
@@ -57,6 +57,50 @@ const safetyOptions = computed(() =>
         hint="Added on top of the total to cover failed prints"
         persistent-hint
       />
+
+      <v-row
+        align="center"
+        no-gutters
+        class="mt-2"
+      >
+        <v-col
+          cols="12"
+          sm="4"
+        >
+          <v-checkbox
+            v-model="budgetStore.requiresPainting"
+            label="Requires painting"
+            hide-details
+          />
+        </v-col>
+        <template v-if="budgetStore.requiresPainting">
+          <v-col
+            cols="7"
+            sm="5"
+            class="pl-sm-2"
+          >
+            <v-text-field
+              v-model.number="budgetStore.paintLaborCost"
+              type="number"
+              min="0"
+              label="Paint labor cost"
+              hide-details
+            />
+          </v-col>
+          <v-col
+            cols="5"
+            sm="3"
+            class="pl-2"
+          >
+            <v-select
+              v-model="budgetStore.paintLaborCurrency"
+              :items="CURRENCY_OPTIONS"
+              label="Currency"
+              hide-details
+            />
+          </v-col>
+        </template>
+      </v-row>
     </v-card-text>
   </v-card>
 </template>

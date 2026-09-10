@@ -6,24 +6,37 @@ import { round } from '@/utils/calculations';
 
 const budgetStore = useBudgetStore();
 
-const hasResult = computed(() => budgetStore.result.subtotalCUP > 0);
+const hasResult = computed(
+  () => budgetStore.result.subtotalCUP > 0 || budgetStore.result.paintLaborCostCUP > 0,
+);
 
-const breakdown = computed(() => [
-  {
-    label: budgetStore.selectedMaterial
-      ? `Material (${budgetStore.selectedMaterial.name})`
-      : 'Material',
-    value: round(budgetStore.result.materialCostCUP),
-  },
-  {
-    label: 'Production',
-    value: round(budgetStore.result.productionCostCUP),
-  },
-  {
-    label: `Safety margin (${budgetStore.safetyPercent}%)`,
-    value: round(budgetStore.result.safetyAmountCUP),
-  },
-]);
+const breakdown = computed(() => {
+  const rows = [
+    {
+      label: budgetStore.selectedMaterial
+        ? `Material (${budgetStore.selectedMaterial.name})`
+        : 'Material',
+      value: round(budgetStore.result.materialCostCUP),
+    },
+    {
+      label: 'Production',
+      value: round(budgetStore.result.productionCostCUP),
+    },
+    {
+      label: `Safety margin (${budgetStore.safetyPercent}%)`,
+      value: round(budgetStore.result.safetyAmountCUP),
+    },
+  ];
+
+  if (budgetStore.requiresPainting) {
+    rows.push({
+      label: 'Paint labor',
+      value: round(budgetStore.result.paintLaborCostCUP),
+    });
+  }
+
+  return rows;
+});
 </script>
 
 <template>
