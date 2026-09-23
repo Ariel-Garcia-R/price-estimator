@@ -66,11 +66,10 @@ export const LIMITS = {
 } as const;
 
 /**
- * Fixed factors used to derive material cost, production cost and profit
- * from the single "cost per gram" value configured in Settings, once
- * converted to CUP with the dollar rate. See `calculateBudget`.
+ * Fixed per-gram amounts, in USD, that split the "cost per gram" configured
+ * in Settings into material, production and profit. See `calculateBudget`.
  */
 export const PRICING_FACTORS = {
-  MATERIAL_COST_FACTOR: 0.04,
-  PROFIT_OFFSET: 0.08,
+  MATERIAL_COST_PER_GRAM_USD: 0.04,
+  PRODUCTION_COST_PER_GRAM_USD: 0.04,
 } as const;

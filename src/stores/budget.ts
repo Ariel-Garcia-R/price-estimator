@@ -117,11 +117,11 @@ export const useBudgetStore = defineStore('budget', () => {
     { immediate: true },
   );
 
-  // The piece weight and the selected filament are kept for reference and
-  // display only: material cost, production cost and profit are derived
-  // entirely from the production cost setting, not from these two inputs.
+  // The selected filament is shown for reference only: material cost uses a
+  // fixed per-gram amount (see `calculateBudget`), not the filament price.
   const result = computed(() =>
     calculateBudget({
+      modelWeightGrams: clampNumber(modelWeightGrams.value, 0, LIMITS.MODEL_WEIGHT_GRAMS_MAX),
       productionCostPerGram: productionStore.amountPerGram,
       safetyPercent: safetyPercent.value,
       dollarRateCUP: ratesStore.dollarRateCUP,

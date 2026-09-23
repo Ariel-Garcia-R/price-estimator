@@ -2,11 +2,11 @@ import type { MoneyAmount } from '@/types';
 import { CURRENCY, PRICING_FACTORS } from '@/utils/constants';
 
 export interface BudgetInput {
+  /** Weight of the piece; every per-gram amount is multiplied by it. */
+  modelWeightGrams: number;
   /**
-   * The "cost per gram" value configured in Settings. The filament weight and
-   * price no longer participate in the calculation directly: material cost,
-   * production cost and profit are all derived from this single value. Kept
-   * as a `MoneyAmount` for parity with Settings, but only `.value` is used.
+   * The "cost per gram" configured in Settings: the full selling price per
+   * gram (material + production + profit), before safety margin and painting.
    */
   productionCostPerGram: MoneyAmount;
   safetyPercent: number;
@@ -20,8 +20,8 @@ export interface BudgetInput {
 export interface BudgetResult {
   materialCostCUP: number;
   productionCostCUP: number;
-  /** Profit derived from the production cost setting, added on top of the total. */
   profitCUP: number;
+  /** Material + production + profit, the base the safety margin applies to. */
   subtotalCUP: number;
   safetyAmountCUP: number;
   paintLaborCostCUP: number;
@@ -45,48 +45,47 @@ export function convertToCUP(amount: MoneyAmount, dollarRateCUP: number): number
 }
 
 /**
- * Material cost, production cost and profit are all derived from the single
- * "cost per gram" setting (`P`) and the dollar rate (`R`):
- *   - Material  = P * MATERIAL_COST_FACTOR * R
- *   - Production = (P - MATERIAL_COST_FACTOR) * R
- *   - Profit    = (P - PROFIT_OFFSET) * R
- * The piece weight and the selected filament are not part of these formulas;
- * they remain in the UI for reference only.
+ * With `P` = cost per gram (Settings), `R` = dollar rate and `g` = grams:
+ *   - Material   = 0.04 USD * R * g
+ *   - Production = 0.04 USD * R * g
+ *   - Profit     = (P - 0.08 USD) * R * g   (never below 0)
+ *   - Subtotal   = Material + Production + Profit
+ *   - Total      = Subtotal * (1 + safety%) + painting
+ *
+ * Example, 1 g, P = 0.12 USD, R = 720, 10% safety, 1000 CUP painting:
+ *   (28.8 + 28.8 + 28.8) * 1.1 + 1000 = 1095.04 CUP
  */
 export function calculateBudget(input: BudgetInput): BudgetResult {
   const hasRate = isPositiveDollarRate(input.dollarRateCUP);
-  const productionCostValue = input.productionCostPerGram.value;
+  const rate = hasRate ? input.dollarRateCUP : 0;
+  const grams = clampNumber(input.modelWeightGrams, 0, Number.MAX_SAFE_INTEGER);
 
-  const materialCostCUP = hasRate
-    ? productionCostValue * PRICING_FACTORS.MATERIAL_COST_FACTOR * input.dollarRateCUP
-    : 0;
+  const costPerGramCUP = Math.max(convertToCUP(input.productionCostPerGram, rate), 0);
+  const materialPerGramCUP = PRICING_FACTORS.MATERIAL_COST_PER_GRAM_USD * rate;
+  const productionPerGramCUP = PRICING_FACTORS.PRODUCTION_COST_PER_GRAM_USD * rate;
 
-  const productionCostCUP = hasRate
-    ? (productionCostValue - PRICING_FACTORS.MATERIAL_COST_FACTOR) * input.dollarRateCUP
-    : 0;
+  // A cost per gram below material + production would mean selling at a loss;
+  // the profit is floored at 0 instead of showing a negative amount.
+  const profitPerGramCUP = Math.max(
+    costPerGramCUP - materialPerGramCUP - productionPerGramCUP,
+    0,
+  );
 
-  const profitCUP = hasRate
-    ? (productionCostValue - PRICING_FACTORS.PROFIT_OFFSET) * input.dollarRateCUP
-    : 0;
+  const materialCostCUP = materialPerGramCUP * grams;
+  const productionCostCUP = productionPerGramCUP * grams;
+  const profitCUP = profitPerGramCUP * grams;
+  const subtotalCUP = materialCostCUP + productionCostCUP + profitCUP;
 
-  const subtotalCUP = materialCostCUP + productionCostCUP;
-
-  // The safety percentage is applied to the material + production subtotal
-  // only, so a 15% selection turns a 100 CUP piece into 115 CUP. Profit and
-  // painting labor are added afterwards, unaffected by the failed-print margin.
-  const totalWithSafetyCUP = subtotalCUP * (1 + input.safetyPercent / 100);
-
-  // Derived by subtraction rather than recomputed, which guarantees that the
-  // rows shown in the breakdown always add up to the total exactly.
-  const safetyAmountCUP = totalWithSafetyCUP - subtotalCUP;
+  // The safety margin applies to material + production + profit only;
+  // painting is added afterwards, unaffected by it.
+  const safetyAmountCUP = subtotalCUP * (Math.max(input.safetyPercent, 0) / 100);
 
   const paintLaborCostCUP = input.requiresPainting
-    ? convertToCUP(input.paintLaborCost, input.dollarRateCUP)
+    ? Math.max(convertToCUP(input.paintLaborCost, rate), 0)
     : 0;
 
-  const totalCUP = totalWithSafetyCUP + profitCUP + paintLaborCostCUP;
-
-  const totalUSD = hasRate ? totalCUP / input.dollarRateCUP : 0;
+  const totalCUP = subtotalCUP + safetyAmountCUP + paintLaborCostCUP;
+  const totalUSD = hasRate ? totalCUP / rate : 0;
 
   return {
     materialCostCUP,
