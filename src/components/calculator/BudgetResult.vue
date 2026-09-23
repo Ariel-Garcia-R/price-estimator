@@ -21,12 +21,12 @@ const breakdown = computed(() => {
       value: round(budgetStore.result.productionCostCUP),
     },
     {
-      label: `Safety margin (${budgetStore.safetyPercent}%)`,
-      value: round(budgetStore.result.safetyAmountCUP),
-    },
-    {
       label: 'Profit',
       value: round(budgetStore.result.profitCUP),
+    },
+    {
+      label: `Safety margin (${budgetStore.safetyPercent}%)`,
+      value: round(budgetStore.result.safetyAmountCUP),
     },
   ];
 
