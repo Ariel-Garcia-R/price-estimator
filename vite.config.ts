@@ -1,11 +1,82 @@
 import { fileURLToPath, URL } from 'node:url';
-import { defineConfig } from 'vite';
+import { existsSync } from 'node:fs';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify';
 import { VitePWA } from 'vite-plugin-pwa';
 
+type ApiHandler = (request: Request) => Promise<Response> | Response;
+
+/**
+ * Runs the Vercel functions in `api/` inside the Vite dev server.
+ *
+ * Plain `vite` has no serverless runtime: without this, a request to
+ * `/api/eltoque-rate` resolves to `api/eltoque-rate.ts` and Vite serves the
+ * transpiled source code instead of executing it. Production is unaffected;
+ * there Vercel runs the functions itself.
+ */
+function devApiFunctions(): Plugin {
+  return {
+    name: 'dev-api-functions',
+    apply: 'serve',
+    configureServer(server) {
+      // Expose server-only variables (e.g. ELTOQUE_TOKEN) to the handlers,
+      // mirroring Vercel's environment. The empty prefix loads unprefixed keys.
+      const env = loadEnv(server.config.mode, server.config.envDir || process.cwd(), '');
+      for (const [key, value] of Object.entries(env)) {
+        process.env[key] ??= value;
+      }
+
+      server.middlewares.use('/api', async (req, res, next) => {
+        const url = new URL(req.url ?? '/', 'http://localhost');
+        const name = url.pathname.replace(/^\/+|\/+$/g, '');
+        const file = fileURLToPath(new URL(`./api/${name}.ts`, import.meta.url));
+
+        if (!/^[\w-]+$/.test(name) || !existsSync(file)) {
+          next();
+          return;
+        }
+
+        try {
+          const mod = await server.ssrLoadModule(file);
+          const method = req.method ?? 'GET';
+          const handler = mod[method] as ApiHandler | undefined;
+
+          if (typeof handler !== 'function') {
+            res.statusCode = 405;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: 'Method not allowed' }));
+            return;
+          }
+
+          const headers = new Headers();
+          for (const [key, value] of Object.entries(req.headers)) {
+            if (typeof value === 'string') headers.set(key, value);
+            else if (Array.isArray(value)) headers.set(key, value.join(', '));
+          }
+
+          const response = await handler(
+            new Request(`http://${req.headers.host ?? 'localhost'}${req.originalUrl ?? req.url}`, {
+              method,
+              headers,
+            }),
+          );
+
+          res.statusCode = response.status;
+          response.headers.forEach((value, key) => res.setHeader(key, value));
+          res.end(Buffer.from(await response.arrayBuffer()));
+        } catch (error) {
+          server.ssrFixStacktrace(error as Error);
+          next(error);
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
+    devApiFunctions(),
     vue({ template: { transformAssetUrls } }),
     vuetify({ autoImport: true }),
     VitePWA({

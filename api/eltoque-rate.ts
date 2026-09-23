@@ -56,11 +56,12 @@ function formatHavanaDate(date: Date): string {
   return `${get('year')}-${get('month')}-${get('day')} ${hour}:${get('minute')}:${get('second')}`;
 }
 
-export default async function handler(request: Request): Promise<Response> {
-  if (request.method !== 'GET') {
-    return json({ error: 'Method not allowed' }, 405);
-  }
-
+/**
+ * Web-standard signature (`Request` → `Response`). Vercel's Node.js runtime
+ * only uses it for named HTTP-method exports; a `default` export would be
+ * called with Node's `(req, res)` instead. Other methods get a 405 from Vercel.
+ */
+export async function GET(): Promise<Response> {
   const token = process.env.ELTOQUE_TOKEN;
   if (!token) {
     return json(
